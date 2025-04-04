@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Network Visualization with Tools</title>
+    <script src="https://unpkg.com/cytoscape@3.21.1/dist/cytoscape.min.js"></script>
+    <style>
+        body {
+            display: flex;
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+        }
+        
+        #tools {
+            width: 250px;
+            background: #f4f4f4;
+            padding: 20px;
+            border-right: 2px solid #ddd;
+            display: flex;
+            flex-direction: column;
+        }
+
+        #cy {
+            flex-grow: 1;
+            height: 600px;
+            border: 1px solid #ddd;
+        }
+
+        .selected {
+            border: 4px solid #3498db; /* Highlight with a blue border */
+        }
+
+        .group-box {
+            background-color: rgba(100, 100, 100, 0.2); 
+            border: 2px solid #333;
+            position: absolute;
+            z-index: -1;
+        }
+
+        .button {
+            margin-bottom: 10px;
+            padding: 10px;
+            background-color: #3498db;
+            color: white;
+            border: none;
+            cursor: pointer;
+            text-align: center;
+        }
+
+        .button:active {
+            background-color: #2980b9;
+        }
+
+        .button.disabled {
+            background-color: #ddd;
+            cursor: not-allowed;
+        }
+    </style>
+</head>
+<body>
+
+<div id="tools">
+    <button id="groupButton" class="button">Create Group</button>
+    <button id="labelButton" class="button">Add Label</button>
+    <button id="createEdgeButton" class="button">Create Edge</button>
+    <button id="deleteButton" class="button">Delete Node/Edge</button>
+</div>
+
+<div id="cy"></div>
+
+<script>
+    let cy = cytoscape({
+        container: document.getElementById('cy'),
+        elements: [
+            { data: { id: 'Router01', label: 'Router A' }, position: { x: 100, y: 100 }, classes: 'router' },
+            { data: { id: 'Switch01', label: 'Switch A' }, position: { x: 300, y: 100 }, classes: 'switch' },
+            { data: { id: 'PC01', label: 'PC A' }, position: { x: 500, y: 100 }, classes: 'pc' },
+            { data: { id: 'Router02', label: 'Router B' }, position: { x: 100, y: 300 }, classes: 'router' },
+            { data: { id: 'Switch02', label: 'Switch B' }, position: { x: 300, y: 300 }, classes: 'switch' },
+            { data: { id: 'PC02', label: 'PC B' }, position: { x: 500, y: 300 }, classes: 'pc' },
+        ],
+        style: [
+            { selector: 'node', style: {
+                'label': 'data(label)',
+                'text-valign': 'center',
+                'color': '#fff',
+                'width': '60px',
+                'height': '60px',
+                'background-color': '#28a745',
+                'border-color': '#000',
+                'border-width': 2,
+            }},
+            { selector: '.router', style: { 'background-color': '#ff5733' }},
+            { selector: '.switch', style: { 'background-color': '#3498db' }},
+            { selector: '.pc', style: { 'background-color': '#f39c12' }},
+            { selector: 'edge', style: { 
+                'width': 3, 
+                'line-color': '#ccc',
+                'target-arrow-color': '#ccc',
+                'target-arrow-shape': 'triangle'
+            }},
+            { selector: '.selected', style: { 
+                'border-width': 4, 
+                'border-color': '#3498db' // Highlight selected nodes with blue
+            }},
+            { selector: '.group-box', style: { 
+                'background-color': 'rgba(100, 100, 100, 0.2)', 
+                'border-width': 3, 
+                'border-color': '#333'
+            }}
+        ],
+        layout: { name: 'preset', positions: (node) => node.position() }
+    });
+
+    let selectedNodes = [];
+    let edgeDrawingMode = false;
+    let edgeStartNode = null;
+    let groupBox = null;
+
+    // Highlight node on click and allow multiple node selection with Shift
+    cy.on('tap', 'node', function(evt) {
+        let node = evt.target;
+        let isShiftPressed = evt.originalEvent.shiftKey;
+
+        if (isShiftPressed) {
+            // Shift key pressed, allow selecting multiple nodes
+            if (selectedNodes.includes(node.id())) {
+                selectedNodes = selectedNodes.filter(n => n !== node.id());
+                node.removeClass('selected');
+            } else {
+                selectedNodes.push(node.id());
+                node.addClass('selected');
+            }
+        } else {
+            // Single node selection
+            selectedNodes = [node.id()];
+            cy.$('node').removeClass('selected');
+            node.addClass('selected');
+        }
+    });
+
+    // Create Group (Draw Box around nodes)
+    document.getElementById('groupButton').onclick = function() {
+        if (selectedNodes.length > 1) {
+            // Get the bounding box for selected nodes
+            let boundingBox = cy.nodes(selectedNodes).boundingBox();
+
+            // Create a box (div) around the selected nodes using their bounding box
+            groupBox = cy.add({
+                data: { id: 'group-box' },
+                position: { x: (boundingBox.x1 + boundingBox.x2) / 2, y: (boundingBox.y1 + boundingBox.y2) / 2 },
+                classes: 'group-box'
+            });
+
+            // Set the size of the group box to match the bounding box of selected nodes
+            groupBox.style('width', boundingBox.x2 - boundingBox.x1);
+            groupBox.style('height', boundingBox.y2 - boundingBox.y1);
+
+            // Update the layout after grouping
+            cy.layout({ name: 'preset' }).run();
+        } else {
+            alert('Select multiple nodes to create a group.');
+        }
+    };
+
+    // Add label to nodes
+    document.getElementById('labelButton').onclick = function() {
+        if (selectedNodes.length > 0) {
+            let label = prompt('Enter label for selected node(s):');
+            selectedNodes.forEach(id => {
+                let node = cy.getElementById(id);
+                node.data('label', label); // Update the label
+            });
+        }
+    };
+
+    // Toggle edge drawing mode (Draw edges between two nodes)
+    document.getElementById('createEdgeButton').onclick = function() {
+        edgeDrawingMode = !edgeDrawingMode;
+        alert(edgeDrawingMode ? 'Click two nodes to draw an edge.' : 'Edge drawing mode disabled.');
+    };
+
+    // Draw edge between two nodes
+    cy.on('tap', 'node', function(evt) {
+        if (edgeDrawingMode) {
+            if (edgeStartNode === null) {
+                edgeStartNode = evt.target;
+            } else {
+                let edgeEndNode = evt.target;
+
+                // Prevent creating an edge from node to itself
+                if (edgeStartNode.id() !== edgeEndNode.id()) {
+                    cy.add({
+                        data: {
+                            id: `edge-${edgeStartNode.id()}-${edgeEndNode.id()}`,
+                            source: edgeStartNode.id(),
+                            target: edgeEndNode.id()
+                        }
+                    });
+                }
+                edgeStartNode = null; // Reset for the next edge
+            }
+        }
+    });
+
+    // Delete selected node or edge
+    document.getElementById('deleteButton').onclick = function() {
+        if (selectedNodes.length > 0) {
+            selectedNodes.forEach(id => {
+                cy.getElementById(id).remove();
+            });
+            selectedNodes = [];
+        } else {
+            let selectedEdges = cy.$('edge:selected');
+            selectedEdges.remove();
+        }
+    };
+
+</script>
+
+</body>
+</html>

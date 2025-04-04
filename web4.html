@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Network Visualization with Interactivity</title>
+    <script src="https://unpkg.com/cytoscape@3.21.1/dist/cytoscape.min.js"></script>
+    <style>
+        #cy {
+            width: 100%;
+            height: 600px;
+            border: 1px solid #ddd;
+        }
+    </style>
+</head>
+<body>
+
+<div id="cy"></div>
+
+<script>
+    let cy = cytoscape({
+        container: document.getElementById('cy'),
+        elements: [
+            { data: { id: 'Router01', label: 'Router A' }, classes: 'router' },
+            { data: { id: 'Switch01', label: 'Switch A' }, classes: 'switch' },
+            { data: { id: 'PC01', label: 'PC A' }, classes: 'pc' },
+            { data: { id: 'Router02', label: 'Router B' }, classes: 'router' },
+            { data: { id: 'Switch02', label: 'Switch B' }, classes: 'switch' },
+            { data: { id: 'PC02', label: 'PC B' }, classes: 'pc' },
+        ],
+        style: [
+            { selector: 'node', style: {
+                'label': 'data(label)',
+                'text-valign': 'center',
+                'color': '#fff',
+                'width': '60px', 
+                'height': '60px',
+                'background-color': '#28a745',
+                'border-color': '#000',
+                'border-width': 2,
+            }},
+            { selector: '.router', style: { 'background-color': '#ff5733' }},
+            { selector: '.switch', style: { 'background-color': '#3498db' }},
+            { selector: '.pc', style: { 'background-color': '#f39c12' }},
+            { selector: 'edge', style: { 
+                'width': 3, 
+                'line-color': '#ccc',
+                'target-arrow-color': '#ccc',
+                'target-arrow-shape': 'triangle'
+            }}
+        ],
+        layout: { name: 'grid', rows: 2 }
+    });
+
+    let selectedNodes = [];
+
+    // Drag nodes and select multiple nodes using Shift
+    cy.on('tap', 'node', function(evt) {
+        let node = evt.target;
+        let isShiftPressed = evt.originalEvent.shiftKey;
+
+        if (isShiftPressed) {
+            // Shift key pressed, allow selecting multiple nodes
+            if (selectedNodes.includes(node.id())) {
+                selectedNodes = selectedNodes.filter(n => n !== node.id());
+                node.removeClass('selected');
+            } else {
+                selectedNodes.push(node.id());
+                node.addClass('selected');
+            }
+        } else {
+            // Single node selection
+            selectedNodes = [node.id()];
+            cy.$('node').removeClass('selected');
+            node.addClass('selected');
+        }
+    });
+
+    // Function to create a group node (virtual node for grouping)
+    function createGroup() {
+        if (selectedNodes.length > 1) {
+            let groupName = prompt('Enter group label:', 'Group ' + (cy.nodes().length + 1));
+            let groupNodeId = 'Group_' + Date.now();
+            cy.add({ data: { id: groupNodeId, label: groupName } });
+
+            // Add the selected nodes to the group
+            cy.batch(function() {
+                selectedNodes.forEach(id => {
+                    let node = cy.getElementById(id);
+                    node.data('group', groupNodeId); // Mark the node as part of the group
+                });
+            });
+
+            // Update layout
+            cy.layout({ name: 'grid' }).run();
+        } else {
+            alert('Select multiple nodes to create a group.');
+        }
+    }
+
+    // Function to add a label to nodes
+    function addLabelToNodes() {
+        if (selectedNodes.length > 0) {
+            let label = prompt('Enter label for selected node(s):');
+            selectedNodes.forEach(id => {
+                let node = cy.getElementById(id);
+                node.data('label', label); // Update the label of the node
+            });
+        }
+    }
+
+    // Function to draw an edge between two nodes
+    let edgeDrawingMode = false;
+    let edgeStartNode = null;
+
+    function toggleEdgeDrawing() {
+        edgeDrawingMode = !edgeDrawingMode;
+        if (edgeDrawingMode) {
+            alert('Click two nodes to draw an edge between them.');
+        } else {
+            alert('Edge drawing mode disabled.');
+        }
+    }
+
+    cy.on('tap', 'node', function(evt) {
+        if (edgeDrawingMode) {
+            if (edgeStartNode === null) {
+                edgeStartNode = evt.target;
+            } else {
+                let edgeEndNode = evt.target;
+                // Create an edge between start and end node
+                cy.add({
+                    data: {
+                        id: `edge-${edgeStartNode.id()}-${edgeEndNode.id()}`,
+                        source: edgeStartNode.id(),
+                        target: edgeEndNode.id()
+                    }
+                });
+                edgeStartNode = null; // Reset for the next edge
+                cy.layout({ name: 'grid' }).run(); // Recalculate layout
+            }
+        }
+    });
+
+    // Example of adding group, labels, and edge drawing buttons
+    let groupButton = document.createElement('button');
+    groupButton.innerHTML = 'Create Group';
+    groupButton.onclick = createGroup;
+    document.body.appendChild(groupButton);
+
+    let labelButton = document.createElement('button');
+    labelButton.innerHTML = 'Add Label';
+    labelButton.onclick = addLabelToNodes;
+    document.body.appendChild(labelButton);
+
+    let edgeButton = document.createElement('button');
+    edgeButton.innerHTML = 'Toggle Edge Drawing';
+    edgeButton.onclick = toggleEdgeDrawing;
+    document.body.appendChild(edgeButton);
+
+</script>
+
+</body>
+</html>
